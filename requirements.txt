@@ -1,0 +1,7 @@
+pytest
+pandas
+flask
+furl
+requests
+pyOpenSSL
+maya
