@@ -61,6 +61,37 @@ def test_campaign_stats(reporter: SnapchatReporter, ad_account_id: str):
   assert df is not None
   assert 'campaign_id' in df.columns
 
+def test_performance_report(reporter: SnapchatReporter, ad_account_id: str):
+  columns = [
+    'impressions',
+    'swipes',
+    'view_time_millis',
+    'screen_time_millis',
+    'quartile_1',
+    'quartile_2',
+    'quartile_3',
+    'view_completion',
+    'spend',
+    'video_views',
+    'frequency',
+    'uniques',
+    'swipe_up_percent'
+  ]
+  reporter.api.ad_account_id = ad_account_id
+  entities = reporter.api.get_campaigns(ad_account_id=ad_account_id)
+  entity = entities[0]
+  df = reporter.get_performance_report(
+    entity_granularity='campaign',
+    entity_ids=[entity['id']],
+    start_date=datetime(2020, 4, 9),
+    end_date=datetime(2020, 4, 15),
+    columns=columns
+  )
+
+  # import pdb; pdb.set_trace()
+  assert df is not None
+  assert 'campaign_id' in df.columns
+
 def test_walmart_ad_stats(reporter: SnapchatReporter, ad_account_id: str):
   columns = [
     'impressions',

@@ -122,3 +122,82 @@ class SnapchatReporter:
     df = self.data_frame_from_response(response=response, columns=columns, entity=Entity.campaign)
     df['campaign_id'] = campaign_id
     return df
+  
+  def get_performance_report(self, time_granularity: str, entity_granularity: str, entity_ids: Optional[List[str]]=None, columns: List[str]=[], entity_columns: List[str]=[], start_date: Optional[datetime]=None, end_date: Optional[datetime]=None) -> pd.DataFrame:
+    if entity_ids is None:
+      entity_ids = []
+    elif len(entity_ids) == 0:
+      return pd.DataFrame()
+
+    entity_type = Entity(entity_granularity)
+    if entity_columns or len(entity_ids) == 0:
+      if entity_type is Entity.campaign:      
+        entities = [self.api.get_campaign(campaign_id=entity_ids[0])] if len(entity_ids) == 1 else self.api.get_campaigns()
+      elif entity_type is Entity.adsquad:
+        entities = [self.api.get_adsquad(adsquad_id=entity_ids[0])] if len(entity_ids) == 1 else self.api.get_adsquads()
+      elif entity_type is Entity.ad:
+        entities = [self.api.get_ad(ad_id=entity_ids[0])] if len(entity_ids) == 1 else self.api.get_ads()
+      else:
+        raise ValueError('Unsupported entity type', entity_type)
+
+      if len(entity_ids) == 0:
+        entity_ids = sorted([e['id'] for e in entities])
+    else:
+      entities = []
+
+    parameters = {
+      'granularity': time_granularity,
+      'fields': ','.join(columns),
+      'start_time': self.iso_date(start_date),
+      'end_time': self.iso_date(end_date),
+    } if columns else {}
+
+    all_rows = []
+    for entity_id in entity_ids:
+      if columns:
+        response = self.api.get(
+          endpoint=f'{entity_type.value}s/{entity_id}/stats',
+          parameters=parameters
+        ).json()
+        rows = [
+          {
+            f'{entity_type.value}_id': entity_id,
+            'start_time': t['start_time'],
+            'end_time': t['end_time'],
+            **t['stats'],
+          }
+          for r in response['timeseries_stats']
+          for t in r['timeseries_stat']['timeseries']
+        ]
+      else:
+        rows = [
+          {
+            f'{entity_type.value}_id': entity_id,
+          },
+        ]
+      
+      if entity_columns:
+        matching_entities = list(filter(lambda e: e['id'] == entity_id, entities))
+        assert len(matching_entities) == 1, f'Entity ID {entity_id} does not match exactly on entity {matching_entities}'
+        entity = matching_entities[0]
+        rows = [
+          {
+            **r,
+            **{
+              c: entity[c]
+              for c in entity_columns
+            },
+          }
+          for r in rows
+        ]
+
+      all_rows.extend(rows)
+
+    df =  pd.DataFrame(all_rows)
+    if df.empty:
+      return df
+
+    if columns:
+      df.start_time = df.start_time.apply(self.reformatted_response_date)
+      df.end_time = df.end_time.apply(self.reformatted_response_date)
+    return df
